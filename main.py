@@ -78,7 +78,7 @@ def callback():
     session['refresh_token'] = token_info['refresh_token']
     session['expires_at'] = datetime.now().timestamp() + token_info['expires_in']
 
-    return redirect('/run-backend')
+    return redirect('/input-text')
 
 
 @app.route('/refresh-token')
@@ -99,7 +99,31 @@ def refresh_token():
 
         session['access_token'] = new_token_info['access_token']
         session['expires_at'] = datetime.now().timestamp() + new_token_info['expires_in']
+        return redirect('/run-backend')
 
+
+@app.route('/input-text', methods=['GET'])
+def input_text():
+    return '''
+    <form action="/process-text" method="POST">
+            <label for="story_text">Enter your story text:</label><br>
+            <textarea id="story_text" name="story_text" rows="4" cols="50"></textarea><br><br>
+            <label for="genre">Enter a genre:</label><br>
+            <input type="text" id="genre" name="genre"><br><br>
+            <button type="submit">Submit</button>
+    </form>
+'''
+
+@app.route('/process-text', methods=['POST'])
+def process_text():
+    
+    session['story_text'] = request.form['story_text'] 
+    session['genre'] = request.form['genre'].strip()
+
+     
+    
+    
+    return redirect('/run-backend')
 
 @app.route('/run-backend')
 def run_backend():
@@ -110,16 +134,37 @@ def run_backend():
     if datetime.now().timestamp() > session['expires_at']:
         return redirect('/refresh-token')
     
+    story_text = session['story_text']
+    genre = session['genre']
     access_token = session['access_token']
-    playlists = []
-    song_list = []
     token = get_token()
     user_id = get_user_id(access_token)
+
+
+
+
+    response = handle_conversation(genre, story_text)
+    print(response)
+
+    if len(response) == 2:
+            descriptor, title = response[0], response[1]
+            print(descriptor + " " + title)
+            result = search_for_playlist(token, descriptor)
+
     
-    result = search_for_playlist(token, "Calm Rap")
+    else:
+        descriptor, genre, title = response[0], response[1], response[2]
+        print(descriptor + " " + genre + " " + title)
 
-    make_user_playlist(access_token, user_id, "MusiTest")
+        result = search_for_playlist(token, descriptor + " "+ genre)
 
+
+ 
+    playlists = []
+    song_list = []
+    
+    playlist_id = make_user_playlist(access_token, user_id, title)
+    print("PLAYLIST ID: " + playlist_id)
     try:
         for i in range(len(result)):
             playlists.append(result[i]["id"])
@@ -127,10 +172,15 @@ def run_backend():
             print(song_list)
 
 
+    
+
     except:
         print("No playlist.")
 
-    return "Cool"
+     
+    populate_playlist(access_token, playlist_id, song_list)
+
+    return "Done!"
 
  
 
@@ -141,16 +191,15 @@ template = """
 
  
 You are given a story text, and a genre. The user wants to find songs related to the story text that are in that genre.
-An example might be: Adam stood up, the sun calmly shining down on him. genre: Rock. You would analyze the text, and find a word to describe it, then add the genre.
-So your response could be: Calm Rock
-Only output two words: a descriptor, followed by the genre the user gave you. 
+An example might be: Adam stood up, the sun calmly shining down on him. genre: Rock. You would analyze the text, and find a word to describe it, then add the genre and finally the title. You want to seperate the words with commas.
+So your response could be: Calm, Rock, Title
+Only output three things: a descriptor (one word), the genre the user gave you, and the title of the playlist.
 Do not write anything else. If the user has not given you a genre, do not output a genre. So for example,
-if you were just given story text like this: His heart was racing, he didn't know what to do. With no genre following it, you could write: "Exciting". You would not add a genre to it.
- 
+if you were just given story text like this: His heart was racing, he didn't know what to do. With no genre following it, you could write: "Exciting", followed by a title like "Exhilerating Playlist". You would not add a genre to it.
+The playlist title needs to match the text well. For example, if there is a fight scene with a protagonist named Malrik barely surviving, you could title it "Malrik's Vengeance" or something cool like that.
+Sample output: Violent, Rap, Malrik's Vengeance
 
-
-
-Here is the conversation history: {context}
+The user wants this to be the genre: {genre}
 
 Here is the story text: {story_text}
 
@@ -182,17 +231,17 @@ prompt = ChatPromptTemplate.from_template(template)
 chain = prompt | model
 
 
-def handle_conversation():
-    context = ""
+def handle_conversation(genre, story_text):
 
-    while True:
-        user_input = input("You: ")
-        if user_input.lower() == "quit":
-            break
-        result = chain.invoke({"context": context, "story_text": user_input }).strip()
-        print("AI:", result)
-        context += f"\nUser: {user_input}\nAI: {result}"
-        return result   
+     
+        
+    result = chain.invoke({"genre": genre, "story_text": story_text }).strip().split(',')
+    
+    print("AI:", result)
+    
+    return result
+    
+        
 
 
 
@@ -281,10 +330,10 @@ def get_playlist_songs(token, playlist_id):
     
  
 
-    if len(song_names) < 5:
+    if len(song_names) < 20:
         random_songs = song_names
     else:
-        random_songs = (random.sample(song_names,5))
+        random_songs = (random.sample(song_names,20))
  
 
     return random_songs
@@ -296,8 +345,9 @@ def get_user_id(access_token):
     url = "https://api.spotify.com/v1/me"
     headers = get_auth_header(access_token)
     result = requests.get(url, headers=headers)
-    json_result = json.loads(result.content)["id"]
-    return json_result
+    json_result = json.loads(result.content)
+    user_id = json_result["id"]
+    return user_id
 
 def make_user_playlist(access_token, user_id, title):
 
@@ -311,6 +361,21 @@ def make_user_playlist(access_token, user_id, title):
     }
     
     response = requests.post(url, headers=headers, json=data)
+    json_result = response.json()
+    playlist_id = json_result["id"]
+
+    return playlist_id
+
+def populate_playlist(access_token, playlist_id, song_list):
+    url = f"https://api.spotify.com/v1/playlists/{playlist_id}/tracks"
+    headers = get_auth_header(access_token)
+    uris = [f"spotify:track:{song}" for song in song_list]
+    data = {"uris": uris}
+    response = requests.post(url, headers=headers, json=data)
+
+ 
+
+    
     
     
 
