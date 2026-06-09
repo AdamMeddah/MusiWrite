@@ -101,26 +101,9 @@ http://localhost:5000
 python -m pytest tests
 ```
 
-The unit tests do not require Spotify credentials or Ollama. They cover the core behavior recruiters are likely to inspect: LLM response parsing, search query construction, and playlist deduplication.
-
-## Resume Alignment
-
-This repo supports the resume entry:
-
-> Built a Flask application that translates free-form user text into Spotify playlists by extracting mood and scene attributes via LLM inference.
-
-Implemented in `main.py` through the `/create-playlist` route and in `musiwrite/core.py` through `SceneAnalysis`, `parse_scene_analysis`, and `fallback_analysis`.
-
-> Implemented local LLM inference using a quantized 7B model via Ollama, eliminating third-party API costs while preserving user data privacy through offline processing.
-
-Implemented in `call_ollama`, which calls the local Ollama HTTP API. The default model is `mistral:7b-instruct-q4_0`, configurable through `OLLAMA_MODEL`.
-
-> Designed playlist aggregation logic using the Spotify Web API, combining tracks across multiple sources while enforcing mood consistency and avoiding repetition.
-
-Implemented through `build_search_queries`, `source_playlists`, `playlist_tracks`, and `aggregate_tracks`. Search queries are derived from the LLM mood and scene analysis, and tracks are deduplicated before being added to the generated playlist.
 
 ## Notes
 
 - Playlists are created as private by default.
-- The app supports the older `CLIENT_ID` and `CLIENT_SECRET` variable names for backward compatibility, but `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` are preferred.
+- The app also supports the older `CLIENT_ID` and `CLIENT_SECRET` variable names for backward compatibility, but `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` are preferred.
 - Spotify credentials and Flask secrets should only live in `.env`, which is ignored by git.
