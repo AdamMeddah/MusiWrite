@@ -107,4 +107,3 @@ The unit tests do not require Spotify credentials or Ollama. They cover the core
 
 - Playlists are created as private by default.
 - The app supports the older `CLIENT_ID` and `CLIENT_SECRET` variable names for backward compatibility, but `SPOTIFY_CLIENT_ID` and `SPOTIFY_CLIENT_SECRET` are preferred.
-- Spotify credentials and Flask secrets should only live in `.env`, which is ignored by git.
